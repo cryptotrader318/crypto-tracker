@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Crypto Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      background: #f7f7f7;
+      overflow-y: scroll;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #eee;
+      border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(to bottom, #9e221a, #f38158);
+      border-radius: 10px;
+      border: 1px solid #d47657;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(to bottom, #7a1b14, #d47657);
+    }
+
+    h2 {
+      color: #333;
+    }
+
+    .live-text {
+      font-size: 14px;
+      color: red;
+      font-weight: bold;
+      display: inline-flex;
+      align-items: center;
+      margin: 10px;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background-color: red;
+      border-radius: 50%;
+      margin-left: 6px;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.5); opacity: 0.6; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .search-container {
+      display: inline-flex;
+      align-items: center;
+      margin-top: 10px;
+      gap: 10px;
+    }
+
+    #searchBar {
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 2px solid #ddd;
+      width: 200px;
+      font-size: 14px;
+    }
+
+    #searchBar:focus {
+      outline: none;
+      border-color: #ddd;
+      box-shadow: 0 0 8px #ddd;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+    }
+
+    th, td {
+      padding: 10px;
+    }
+
+    th {
+      background-color: #f0f0f0;
+    }
+
+    td img {
+      vertical-align: middle;
+      margin-right: 5px;
+    }
+
+    .tabs {
+      margin-top: 20px;
+    }
+
+    .tabs button {
+      background-color: white;
+      color: black;
+      border: 1px solid #ccc;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      border-radius: 20px;
+      margin: 0 5px;
+      transition: background-color 0.3s ease;
+    }
+
+    .tabs button.active-tab {
+      background-color: rgb(158, 34, 26);
+      color: white;
+      border: 1px solid rgb(158, 34, 26);
+    }
+
+    td.coin {
+      text-align: left;
+    }
+
+    .symbol {
+      font-size: 11px;
+      color: #555;
+    }
+
+    .buy-button {
+      background-color: green;
+      color: white;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+    }
+
+    .buy-button:hover {
+      background-color: darkgreen;
+    }
+
+    .sell-button {
+      background-color: red;
+      color: white;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+    }
+
+    .sell-button:hover {
+      background-color: darkred;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+
+    tr:nth-child(odd) {
+      background-color: #ffffff;
+    }
+
+    .datetime {
+      font-size: 16px;
+      margin-bottom: 20px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <h2>Live Cryptocurrency Prices</h2>
+
+  <!-- Live Date and Time Display -->
+  <div id="datetime" class="datetime"></div>
+
+  <div class="search-container">
+    <input type="text" id="searchBar" placeholder="Search for a coin..." onkeyup="filterCoins()">
+  </div>
+
+  <div class="tabs">
+    <button onclick="displayCoins('all')" class="active-tab">All</button>
+    <button onclick="displayCoins('gainer')">Gainer</button>
+    <button onclick="displayCoins('loser')">Loser</button>
+    <button onclick="displayCoins('new')">New</button>
+  </div>
+
+  <div class="live-text">
+    LIVE <div class="live-dot"></div>
+  </div>
+
+  <div id="crypto-table"></div>
+
+  <script>
+    let allCoins = [];
+
+    // Function to load cryptocurrency data
+    async function loadCrypto() {
+      try {
+        const [usdRes, inrRes] = await Promise.all([
+          fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&per_page=250&page=1'),
+          fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=inr&per_page=250&page=1')
+        ]);
+
+        if (!usdRes.ok || !inrRes.ok) {
+          throw new Error('Failed to fetch data');
+        }
+
+        const usdData = await usdRes.json();
+        const inrData = await inrRes.json();
+
+        allCoins = usdData.map((coin, index) => {
+          const inrCoin = inrData.find(c => c.id === coin.id);
+          return {
+            ...coin,
+            index: index + 1,
+            inr_price: inrCoin?.current_price || 0
+          };
+        });
+
+        displayCoins('all');
+      } catch (error) {
+        console.error("Error loading data:", error);
+        document.getElementById("crypto-table").innerHTML = "Failed to load data. Please try again.";
+      }
+    }
+
+    // Function to display the list of coins
+    function displayCoins(type) {
+      document.querySelectorAll('.tabs button').forEach(btn => {
+        btn.classList.remove('active-tab');
+        if (btn.textContent.toLowerCase() === type) {
+          btn.classList.add('active-tab');
+        }
+      });
+
+      let filtered = [...allCoins];
+      if (type === 'gainer') {
+        filtered = filtered.filter(c => c.price_change_percentage_24h > 2);
+      } else if (type === 'loser') {
+        filtered = filtered.filter(c => c.price_change_percentage_24h < -2);
+      } else if (type === 'new') {
+        filtered = filtered.slice(0, 10);
+      }
+
+      let html = `<table>
+        <tr>
+          <th>#</th>
+          <th>Coin</th>
+          <th>Price (USD)</th>
+          <th>Price (INR)</th>
+          <th>24h Change</th>
+          <th>Action</th>
+        </tr>`;
+
+      filtered.forEach((coin) => {
+        const adjustedUsd = coin.current_price.toFixed(2);
+        const adjustedInr = coin.inr_price.toFixed(2);
+        const changeColor = coin.price_change_percentage_24h >= 0 ? 'green' : 'red';
+        const actionBtn = coin.price_change_percentage_24h >= 0
+          ? `<button class="buy-button" onclick="openBuyModal()">Buy</button>`
+          : `<button class="sell-button" onclick="openSellModal()">Sell</button>`;
+
+        html += `
+          <tr>
+            <td>${coin.index}</td>
+            <td class="coin"><img src="${coin.image}" width="20"/> ${coin.name} <span class="symbol">${coin.symbol.toUpperCase()}</span></td>
+            <td>$${adjustedUsd}</td>
+            <td>₹${adjustedInr}</td>
+            <td style="color:${changeColor}">${coin.price_change_percentage_24h.toFixed(2)}%</td>
+            <td>${actionBtn}</td>
+          </tr>`;
+      });
+
+      html += `</table>`;
+      document.getElementById("crypto-table").innerHTML = html;
+    }
+
+    // Function to update the live time and date
+    function updateDatetime() {
+      const now = new Date();
+      const options = {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      };
+      const formattedTime = now.toLocaleString('en-US', options);
+      const formattedDate = now.toLocaleDateString('en-GB'); // 14/5/2025 format
+      document.getElementById("datetime").textContent = `${formattedTime} ${formattedDate}`;
+      document.getElementById("datetime").style.color = '#555'; // Color like the coin symbol
+      document.getElementById("datetime").style.fontSize = '11px'; // Same font size as coin symbol
+    }
+
+    // Update time every second
+    setInterval(updateDatetime, 1000);
+
+    // Function to filter coins based on search input
+    function filterCoins() {
+      const search = document.getElementById('searchBar').value.toLowerCase();
+      const rows = document.querySelectorAll("#crypto-table table tr");
+
+      rows.forEach((row, index) => {
+        if (index === 0) return;
+        const coinName = row.cells[1]?.textContent.toLowerCase();
+        row.style.display = coinName.includes(search) ? '' : 'none';
+      });
+    }
+
+    loadCrypto();
+    setInterval(loadCrypto, 30000); // Refresh every 30 seconds
+  </script>
+</body>
+</html>
